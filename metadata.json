@@ -1,0 +1,6 @@
+{
+  "name": "Blox Hub",
+  "description": "A premium community hub for Blox Fruit players with advanced moderator tools and leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

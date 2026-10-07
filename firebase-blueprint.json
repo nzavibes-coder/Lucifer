@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information and permissions",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["Senior Moderator", "Moderator", "Junior Moderator", "Regular User"] },
+        "badge": { "type": "string", "enum": ["Trusted", "Raider", "Helper", "None"] },
+        "rating": { "type": "number" },
+        "ratingCount": { "type": "number" },
+        "joinDate": { "type": "string" },
+        "isBanned": { "type": "boolean" },
+        "mutedUntil": { "type": "number" }
+      },
+      "required": ["username", "email", "role", "badge", "rating", "ratingCount", "joinDate"]
+    },
+    "Post": {
+      "title": "Community Post",
+      "description": "A public post in the community feed",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "content": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "number" },
+        "badge": { "type": "string" },
+        "role": { "type": "string" },
+        "reactions": { "type": "object" }
+      },
+      "required": ["userId", "username", "content", "timestamp"]
+    },
+    "Message": {
+      "title": "Private Message",
+      "description": "A private message between two users",
+      "type": "object",
+      "properties": {
+        "fromId": { "type": "string" },
+        "toId": { "type": "string" },
+        "content": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["fromId", "toId", "content", "timestamp"]
+    },
+    "PublicChat": {
+      "title": "Public Chat Message",
+      "description": "A message in the live public chatroom",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "content": { "type": "string", "maxLength": 300 },
+        "timestamp": { "type": "number" },
+        "badge": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["userId", "username", "content", "timestamp"]
+    },
+    "Report": {
+      "title": "User Report",
+      "description": "A report filed against a user",
+      "type": "object",
+      "properties": {
+        "reporterId": { "type": "string" },
+        "reportedId": { "type": "string" },
+        "reason": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["reporterId", "reportedId", "reason", "timestamp"]
+    },
+    "Announcement": {
+      "title": "Global Announcement",
+      "description": "A message for all community members",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string", "maxLength": 2000 },
+        "timestamp": { "type": "number" },
+        "authorId": { "type": "string" }
+      },
+      "required": ["content", "timestamp", "authorId"]
+    },
+    "Group": {
+      "title": "Community Group",
+      "description": "A user-created group or crew",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 200 },
+        "leaderId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "leaderId", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "Group Member",
+      "description": "A member of a specific group",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["Leader", "Member"] },
+        "joinedAt": { "type": "number" },
+        "username": { "type": "string" }
+      },
+      "required": ["role", "joinedAt", "username"]
+    },
+    "GroupRequest": {
+      "title": "Group Join Request",
+      "description": "A request to join a group",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "username", "timestamp"]
+    },
+    "GroupMessage": {
+      "title": "Group Chat Message",
+      "description": "A message within a group chat",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "content": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "username", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Public community feed"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Private messages"
+    },
+    "/public_chat/{chatId}": {
+      "schema": "PublicChat",
+      "description": "Live global chat"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Moderation reports"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Global community news"
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Community groups"
+    },
+    "/groups/{groupId}/members/{userId}": {
+      "schema": "GroupMember",
+      "description": "Members of a group"
+    },
+    "/groups/{groupId}/requests/{userId}": {
+      "schema": "GroupRequest",
+      "description": "Pending join requests"
+    },
+    "/groups/{groupId}/messages/{messageId}": {
+      "schema": "GroupMessage",
+      "description": "Internal group chat messages"
+    },
+    "/users/{userId}/missions/{missionId}": {
+      "schema": "object",
+      "description": "Daily mission progress for a user"
+    }
+  }
+}

@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- Primitives ---
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isOwnerEmail() { return isSignedIn() && request.auth.token.email == 'na444715@gmail.com' && request.auth.token.email_verified == true; }
+    
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    
+    function isMod() {
+      return isEmailVerified() && userExists(request.auth.uid) && (isOwnerEmail() || getUserData(request.auth.uid).get('role', 'Regular User') in ['Moderator', 'Senior Moderator']);
+    }
+
+    function isSrMod() {
+      return isEmailVerified() && userExists(request.auth.uid) && (isOwnerEmail() || getUserData(request.auth.uid).get('role', 'Regular User') == 'Senior Moderator');
+    }
+
+    function isNotBanned() {
+      return isEmailVerified() && (!userExists(request.auth.uid) || getUserData(request.auth.uid).get('isBanned', false) != true);
+    }
+
+    function isNotMuted() {
+      return isEmailVerified() && (!userExists(request.auth.uid) || getUserData(request.auth.uid).get('mutedUntil', 0) < request.time.toMillis());
+    }
+
+    // --- Announcements Collection ---
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSrMod();
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      function isValidUserSchema(data) {
+        return data.get('username', '') is string 
+          && data.get('username', '').size() <= 50
+          && data.get('role', 'Regular User') in ['Senior Moderator', 'Moderator', 'Junior Moderator', 'Regular User']
+          && data.get('badge', 'None') in ['Trusted', 'Raider', 'Helper', 'None'];
+      }
+
+      allow read: if isSignedIn();
+      
+      allow create: if isEmailVerified() && request.auth.uid == userId;
+
+      allow update: if isEmailVerified() && (
+        // Self-update (Username)
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'rating', 'ratingCount'])) ||
+        // Mod update (Ban/Unban/Role/Badge/Mute)
+        (isMod()) ||
+        // Junior Mod (Mute only)
+        (getUserData(request.auth.uid).get('role', 'Regular User') == 'Junior Moderator' && incoming().diff(existing()).affectedKeys().hasOnly(['mutedUntil'])) ||
+        // Community rating (Regular users can rate others)
+        (isNotBanned() && request.auth.uid != userId && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'ratingCount']))
+      );
+
+      match /missions/{missionId} {
+        allow read, write: if isEmailVerified() && request.auth.uid == userId;
+      }
+    }
+
+    // --- Posts Collection ---
+    match /posts/{postId} {
+      function isValidPost(data) {
+        return data.userId is string
+          && data.get('content', '') is string && data.get('content', '').size() <= 1000
+          && data.get('username', 'Pirate') is string
+          && data.get('badge', 'None') is string
+          && data.get('role', 'Regular User') is string
+          && (data.reactions == null || data.reactions is map);
+      }
+
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isNotBanned() && isNotMuted() && incoming().userId == request.auth.uid && incoming().timestamp == request.time && isValidPost(incoming());
+      allow update: if isEmailVerified() && isNotBanned() && isNotMuted() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']) && isValidPost(incoming()) && incoming().get('userId', '') == existing().get('userId', '');
+      allow delete: if isEmailVerified() && (existing().get('userId', '') == request.auth.uid || isMod());
+    }
+
+    // --- Public Chat ---
+    match /public_chat/{chatId} {
+      function isValidChat(data) {
+        return data.userId == request.auth.uid
+          && data.content is string && data.content.size() <= 300
+          && data.timestamp == request.time
+          && data.username is string
+          && data.badge is string
+          && data.role is string;
+      }
+
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isNotBanned() && isNotMuted() && isValidChat(incoming());
+      allow delete: if isMod();
+    }
+
+    // --- Private Messages ---
+    match /messages/{messageId} {
+      function isValidMessage(data) {
+        return data.fromId == request.auth.uid
+          && data.toId is string
+          && data.content is string && data.content.size() <= 500
+          && data.timestamp == request.time;
+      }
+
+      allow read: if isEmailVerified() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+      allow create: if isEmailVerified() && isNotBanned() && isNotMuted() && isValidMessage(incoming());
+    }
+
+    // --- Reports Collection ---
+    match /reports/{reportId} {
+      function isValidReport(data) {
+        return data.reporterId == request.auth.uid
+          && data.reportedId is string
+          && data.reason is string && data.reason.size() <= 500
+          && data.timestamp == request.time;
+      }
+
+      allow read: if isMod();
+      allow create: if isEmailVerified() && isNotBanned() && isValidReport(incoming());
+      allow delete: if isMod();
+    }
+
+    // --- Groups Collection ---
+    match /groups/{groupId} {
+      function isGroupLeader(gid) {
+        return getUserData(request.auth.uid).id == get(/databases/$(database)/documents/groups/$(gid)).data.leaderId;
+      }
+      function isGroupMember(gid) {
+        return exists(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid));
+      }
+
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isNotBanned() && incoming().leaderId == request.auth.uid;
+      allow delete: if isEmailVerified() && existing().leaderId == request.auth.uid;
+
+      match /members/{userId} {
+        allow read: if isGroupMember(groupId);
+        allow write: if isEmailVerified() && (request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.leaderId || (request.auth.uid == userId && !exists(/databases/$(database)/documents/groups/$(groupId)) )); 
+        // Wait, members write logic:
+        // Leader can add anyone (accept request).
+        // User can't add themselves directly (must be request).
+        // The Provisioning logic in store adds the leader on create.
+        // So:
+        allow create: if isEmailVerified() && (request.auth.uid == userId || request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.leaderId);
+        allow delete: if isEmailVerified() && (request.auth.uid == userId || request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.leaderId);
+      }
+
+      match /requests/{userId} {
+        allow read: if isEmailVerified() && (request.auth.uid == userId || request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.leaderId);
+        allow create: if isEmailVerified() && isNotBanned() && request.auth.uid == userId;
+        allow delete: if isEmailVerified() && (request.auth.uid == userId || request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.leaderId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) && isNotBanned() && isNotMuted() && incoming().userId == request.auth.uid;
+      }
+    }
+  }
+}
